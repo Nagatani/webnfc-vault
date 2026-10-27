@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NFC Hardware Key Vault // CryptoVault & NfcKeyReader</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="js/tailwind.config.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    body {
+      background-color: #090d16;
+      background-image: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.08), transparent 45%),
+                        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 100% 100%, 28px 28px, 28px 28px;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col font-sans selection:bg-sky-500 selection:text-black">
+
+  <!-- Header -->
+  <header class="border-b border-cyber-border bg-slate-900/80 backdrop-blur sticky top-0 z-40 px-4 py-3.5">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+          <i class="fa-solid fa-ring text-base"></i>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            NFC Hardware Vault <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800">AES-GCM-256</span>
+          </h1>
+          <p class="text-[11px] text-slate-400 font-mono">Vanilla JS: CryptoVault &amp; NfcKeyReader</p>
+        </div>
+      </div>
+      
+      <!-- Hardware Status Badge -->
+      <div id="hw-support-badge" class="px-3 py-1 rounded-full text-xs font-mono flex items-center gap-2 border bg-slate-800 text-slate-400 border-slate-700">
+        <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+        <span class="hidden sm:inline">NFC判定中...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Banner Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Main Grid -->
+  <main class="max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex-1 space-y-6">
+
+    <!-- Compatibility Guide (PC / iOS / Android) -->
+    <div id="compat-notice" class="hidden rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-xs sm:text-sm text-slate-300 backdrop-blur">
+      <div class="flex items-start gap-3">
+        <i class="fa-solid fa-circle-exclamation text-amber-400 text-base mt-0.5"></i>
+        <div class="space-y-1">
+          <p class="font-bold text-amber-300">Web NFC非対応ブラウザで開いています（PC / iPhone）</p>
+          <p class="text-slate-400 leading-relaxed">
+            実機の指輪読み取り・書き込みには <strong class="text-slate-200">Android版 Chrome（HTTPS環境）</strong> が必要です。本ページでは、PCやiOSでも即座に暗号化と解錠フローをテストできるよう<strong class="text-sky-300">「シミュレーター機能」</strong>が内蔵されています。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 Column Flow: Setup & Decrypt -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+      <!-- STEP 1: 鍵の生成と暗号化 (Setup & Encrypt) -->
+      <section class="bg-cyber-panel border border-cyber-border rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+        <div class="flex items-center justify-between border-b border-cyber-border pb-3">
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-full bg-sky-500/20 text-sky-400 text-xs font-mono font-bold flex items-center justify-center border border-sky-500/30">1</span>
+            <h2 class="text-sm sm:text-base font-bold text-white tracking-wide">鍵の生成とデータの暗号化</h2>
+          </div>
+          <span class="text-[11px] font-mono text-slate-500">CryptoVault.encrypt()</span>
+        </div>
+
+        <!-- Plaintext Input -->
+        <div class="space-y-1.5">
+          <label for="input-plaintext" class="text-xs font-semibold text-slate-300 flex items-center justify-between">
+            <span>秘密の本文（暗号化したいデータ）</span>
+            <span class="text-[11px] text-slate-500">平文はソースコードに残しません</span>
+          </label>
+          <textarea id="input-plaintext" rows="3" class="w-full bg-slate-950 border border-cyber-border rounded-xl p-3 text-xs sm:text-sm font-mono text-slate-200 focus:outline-none focus:border-sky-500 transition resize-none placeholder-slate-600" placeholder="例: 機密メモ: 社内Wi-Fiパスワードは [X#99vL_k1] です。"></textarea>
+        </div>
+
+        <!-- Secret Key Field -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label for="input-key" class="text-xs font-semibold text-slate-300">
+              物理鍵用シークレットキー（指輪へ書き込む文字列）
+            </label>
+            <button id="btn-generate-key" class="text-[11px] text-sky-400 hover:text-sky-300 font-mono flex items-center gap-1 transition">
+              <i class="fa-solid fa-arrows-rotate"></i> 強力な鍵を自動生成
+            </button>
+          </div>
+          <div class="relative">
+            <input type="text" id="input-key" class="w-full bg-slate-950 border border-cyber-border rounded-xl py-2.5 pl-3 pr-10 text-xs sm:text-sm font-mono text-amber-300 focus:outline-none focus:border-sky-500 transition" placeholder="32文字の暗号学的に安全なランダム鍵">
+            <button id="btn-copy-key" class="absolute right-2 top-2 p-1.5 text-slate-400 hover:text-slate-200 text-xs transition" title="クリップボードにコピー">
+              <i class="fa-regular fa-copy"></i>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-500 font-mono">※ NTAG213の容量（144バイト）に対し、32文字（約32バイト）は余裕で収まります。</p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+          <button id="btn-run-encrypt" class="w-full py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs tracking-wide transition flex items-center justify-center gap-2 shadow-lg shadow-sky-600/20 active:scale-[0.98]">
+            <i class="fa-solid fa-lock"></i> 暗号化を実行
+          </button>
+          <button id="btn-write-nfc" class="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyber-border text-slate-200 font-semibold text-xs tracking-wide transition flex items-center justify-center gap-2 active:scale-[0.98]">
+            <i class="fa-solid fa-pen-to-square text-sky-400"></i> 指標に鍵を書き込む
+          </button>
+        </div>
+
+        <!-- Output Encrypted Payload -->
+        <div class="space-y-1.5 pt-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-shield-halved text-emerald-400"></i> 暗号化ペイロード JSON
+            </span>
+            <span id="badge-payload-status" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">未暗号化</span>
+          </div>
+          <div class="relative group">
+            <pre id="output-payload" class="w-full max-h-36 overflow-y-auto bg-slate-950 border border-cyber-border rounded-xl p-3 text-[11px] font-mono text-emerald-400 custom-scrollbar whitespace-pre-wrap break-all leading-relaxed">// 暗号化を実行すると、ここに salt / iv / ciphertext（Base64）が出力されます。
+// HTML内に残るのはこのゴミデータのみとなり、鍵なしでは解読不可能です。</pre>
+            <button id="btn-copy-payload" class="absolute top-2 right-2 px-2 py-1 rounded bg-slate-800 text-[10px] text-slate-300 border border-slate-700 hover:text-white opacity-0 group-hover:opacity-100 transition">
+              JSONコピー
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: 指輪をかざして解錠 (Scan & Decrypt) -->
+      <section class="bg-cyber-panel border border-cyber-border rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+        <div class="flex items-center justify-between border-b border-cyber-border pb-3">
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-mono font-bold flex items-center justify-center border border-emerald-500/30">2</span>
+            <h2 class="text-sm sm:text-base font-bold text-white tracking-wide">指輪をかざして解錠</h2>
+          </div>
+          <span class="text-[11px] font-mono text-slate-500">NfcKeyReader.startScan()</span>
+        </div>
+
+        <!-- NFC Scanner Trigger Hub -->
+        <div class="rounded-xl border border-cyber-border bg-slate-950/60 p-4 text-center space-y-3">
+          <!-- Animated Radar / Status Icon -->
+          <div class="relative w-20 h-20 mx-auto flex items-center justify-center my-1">
+            <div id="radar-pulse" class="absolute inset-0 rounded-full border border-slate-700 transition-all duration-700"></div>
+            <div id="scanner-icon-bg" class="w-14 h-14 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-400 text-xl transition-all duration-300 shadow-inner">
+              <i class="fa-solid fa-nfc-directional" id="scanner-status-icon"></i>
+            </div>
+          </div>
+
+          <div>
+            <div id="scanner-status-text" class="text-xs font-bold font-mono uppercase tracking-wider text-slate-300">
+              スキャナー待機中 (IDLE)
+            </div>
+            <div id="scanner-sub-text" class="text-[11px] text-slate-500 mt-0.5">
+              ボタンを押してスマートフォンに指輪をタッチしてください
+            </div>
+          </div>
+
+          <div class="flex gap-2 justify-center">
+            <button id="btn-start-scan" class="py-2.5 px-5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-bold text-xs tracking-wider uppercase transition shadow-lg shadow-emerald-500/20 active:scale-[0.98] flex items-center gap-2">
+              <i class="fa-solid fa-wave-square"></i>
+              <span id="scan-btn-label">NFCスキャン待機開始</span>
+            </button>
+            <button id="btn-stop-scan" class="hidden py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold transition" title="スキャン停止">
+              <i class="fa-solid fa-stop"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Simulation Tools (Fallback for Non-Android / Quick testing) -->
+        <div class="bg-slate-950/80 border border-dashed border-slate-700 rounded-xl p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="font-bold text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-gamepad text-sky-400"></i> デバイスシミュレーター (PC/iOSテスト用)
+            </span>
+            <span class="text-slate-500 font-mono">simulateRead()</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <button id="btn-sim-valid" class="p-2 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] transition text-left flex items-center gap-1.5">
+              <i class="fa-solid fa-check text-emerald-400"></i>
+              <span>正規の鍵で解錠</span>
+            </button>
+            <button id="btn-sim-invalid" class="p-2 rounded-lg bg-rose-950/30 hover:bg-rose-900/40 border border-rose-500/40 text-rose-300 font-mono text-[11px] transition text-left flex items-center gap-1.5">
+              <i class="fa-solid fa-xmark text-rose-400"></i>
+              <span>偽物の鍵で解錠</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Decrypted Result Container -->
+        <div class="space-y-1.5 pt-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-envelope-open-text text-sky-400"></i> 復号された機密コンテンツ
+            </span>
+            <button id="btn-clear-decrypted" class="text-[11px] text-slate-500 hover:text-slate-400 transition hidden">
+              再ロック
+            </button>
+          </div>
+          <div id="decrypted-box" class="min-h-[90px] rounded-xl border border-cyber-border bg-slate-950 p-3.5 flex flex-col justify-center transition-all duration-300">
+            <div id="decrypted-placeholder" class="text-center text-xs text-slate-600 font-mono py-4">
+              <i class="fa-solid fa-lock text-slate-700 text-lg mb-1 block"></i>
+              暗号化されたままです。有効な指輪を検知するとここに平文が表示されます。
+            </div>
+            <div id="decrypted-content" class="hidden text-xs sm:text-sm font-sans text-slate-100 leading-relaxed break-words whitespace-pre-wrap"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- CODE ARCHITECTURE & LIBRARY EXPORTS (Accordion) -->
+    <section class="bg-cyber-panel border border-cyber-border rounded-2xl overflow-hidden shadow-xl">
+      <button id="btn-toggle-source" class="w-full px-5 py-4 flex items-center justify-between bg-slate-900/60 hover:bg-slate-900 transition text-left">
+        <div class="flex items-center gap-3">
+          <i class="fa-solid fa-code text-sky-400 text-sm"></i>
+          <div>
+            <h3 class="text-xs sm:text-sm font-bold text-white tracking-wide">
+              ライブラリのソースコード構造と他のWebページへの組み込み方
+            </h3>
+            <p class="text-[11px] text-slate-400">CryptoVault / NfcKeyReader の単体利用コード</p>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-down text-slate-400 transition-transform duration-300" id="accordion-arrow"></i>
+      </button>
+
+      <div id="source-drawer" class="hidden border-t border-cyber-border p-5 sm:p-6 space-y-4 bg-slate-950 text-xs">
+        <div class="space-y-1">
+          <h4 class="font-bold text-slate-200">使い方概要</h4>
+          <p class="text-slate-400 leading-relaxed">
+            外部ライブラリやnpmパッケージは一切不要です。ブラウザ標準の <strong class="text-slate-300">Web Crypto API</strong> と <strong class="text-slate-300">Web NFC (NDEFReader)</strong> をオブジェクト指向でラッピングしています。以下の2つのクラスをコピーするだけで任意のプロジェクトに導入可能です。
+          </p>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-sky-300 font-semibold">1. CryptoVault (暗号化・復号クラス)</span>
+            <button id="btn-copy-code" class="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
+              JSコードをコピー
+            </button>
+          </div>
+          <pre id="code-snippet-display" class="bg-slate-900 rounded-xl p-3.5 font-mono text-[11px] text-slate-300 overflow-x-auto custom-scrollbar border border-slate-800 leading-relaxed"></pre>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-cyber-border py-4 px-4 text-center text-xs text-slate-500 font-mono">
+    NFC Hardware Vault Prototype // Pure Vanilla JavaScript &amp; Web Standards
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
