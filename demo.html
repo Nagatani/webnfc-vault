@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CryptoVault / NfcKeyReader 最小デモ</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --panel: #ffffff;
+      --border: #cbd5e1;
+      --accent: #0284c7;
+      --ok: #047857;
+      --ng: #be123c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1120;
+        --fg: #e2e8f0;
+        --muted: #94a3b8;
+        --panel: #111827;
+        --border: #334155;
+        --accent: #38bdf8;
+        --ok: #34d399;
+        --ng: #fb7185;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.6 system-ui, -apple-system, sans-serif;
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    h2 { font-size: 1rem; margin: 0 0 8px; }
+    p.lead { margin: 0 0 16px; color: var(--muted); }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    label { display: block; font-weight: 600; margin: 8px 0 4px; }
+    textarea, input, pre {
+      width: 100%;
+      font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: inherit;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+    }
+    pre { margin: 8px 0 0; white-space: pre-wrap; word-break: break-all; min-height: 2.5em; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    button {
+      font: inherit;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: inherit;
+      cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    #support { font-size: 12px; color: var(--muted); }
+    #result.ok { color: var(--ok); border-color: var(--ok); }
+    #result.ng { color: var(--ng); border-color: var(--ng); }
+    #log { max-height: 160px; overflow-y: auto; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CryptoVault / NfcKeyReader 最小デモ</h1>
+    <p class="lead">
+      2つのライブラリだけを使った最小構成の例です。<span id="support"></span>
+      <a href="index.html">フル機能デモへ</a>
+    </p>
+
+    <section>
+      <h2>1. 暗号化</h2>
+      <label for="plain">本文</label>
+      <textarea id="plain" rows="3">NFCタグがなければ読めない秘密のメモ</textarea>
+      <label for="key">鍵（タグに書き込む文字列）</label>
+      <input id="key" type="text" autocomplete="off">
+      <div class="row">
+        <button id="gen">鍵を生成</button>
+        <button id="enc" class="primary">暗号化</button>
+        <button id="write">タグに鍵を書き込む</button>
+      </div>
+      <pre id="payload">（未暗号化）</pre>
+    </section>
+
+    <section>
+      <h2>2. タグで復号</h2>
+      <div class="row">
+        <button id="scan" class="primary">スキャン開始</button>
+        <button id="stop">停止</button>
+        <button id="sim-ok">シミュレート: 正しい鍵</button>
+        <button id="sim-ng">シミュレート: 誤った鍵</button>
+      </div>
+      <pre id="result">（ロック中）</pre>
+    </section>
+
+    <section>
+      <h2>ログ</h2>
+      <pre id="log"></pre>
+    </section>
+  </main>
+
+  <script type="module">
+    import { CryptoVault } from './js/crypto-vault.js';
+    import { NfcKeyReader } from './js/nfc-key-reader.js';
+
+    const $ = (id) => document.getElementById(id);
+    let payload = null;
+    let encryptedWithKey = null;
+
+    const log = (msg) => {
+      $('log').textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + $('log').textContent;
+    };
+
+    const showResult = (text, state) => {
+      $('result').textContent = text;
+      $('result').className = state || '';
+    };
+
+    const supported = NfcKeyReader.isSupported();
+    $('support').textContent = supported
+      ? 'Web NFC 対応ブラウザです。'
+      : 'Web NFC 非対応のため、シミュレートボタンで試せます。';
+    for (const id of ['scan', 'stop', 'write']) $(id).disabled = !supported;
+
+    const reader = new NfcKeyReader({
+      onKeyRead: async (scannedKey, meta) => {
+        log(`鍵を読み取り (UID: ${meta.serialNumber})`);
+        if (!payload) {
+          showResult('先に暗号化を実行してください。', 'ng');
+          return;
+        }
+        try {
+          showResult(await CryptoVault.decrypt(payload, scannedKey), 'ok');
+          log('復号成功');
+        } catch (err) {
+          showResult(err.message, 'ng');
+          log('復号失敗');
+        }
+      },
+      onError: (err) => log(`エラー: ${err.message}`),
+      onStatus: (status, message) => log(`${status}: ${message}`)
+    });
+
+    $('gen').addEventListener('click', () => {
+      $('key').value = CryptoVault.generateRandomKey(32);
+    });
+
+    $('enc').addEventListener('click', async () => {
+      try {
+        const key = $('key').value.trim();
+        payload = await CryptoVault.encrypt($('plain').value.trim(), key);
+        encryptedWithKey = key;
+        $('payload').textContent = JSON.stringify(payload, null, 2);
+        showResult('（ロック中）');
+        log('暗号化しました');
+      } catch (err) {
+        log(`暗号化エラー: ${err.message}`);
+      }
+    });
+
+    $('write').addEventListener('click', async () => {
+      try {
+        await reader.writeKey($('key').value.trim());
+        log('タグへの書き込みが完了しました');
+      } catch (err) {
+        log(`書き込みエラー: ${err.message}`);
+      }
+    });
+
+    $('scan').addEventListener('click', () => reader.startScan().catch(() => {}));
+    $('stop').addEventListener('click', () => reader.stopScan());
+
+    $('sim-ok').addEventListener('click', () => {
+      if (!encryptedWithKey) {
+        log('先に暗号化を実行してください');
+        return;
+      }
+      reader.simulateRead(encryptedWithKey);
+    });
+    $('sim-ng').addEventListener('click', () => reader.simulateRead('WRONG_KEY_' + CryptoVault.generateRandomKey(8)));
+
+    $('gen').click();
+  </script>
+</body>
+</html>
