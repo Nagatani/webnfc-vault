@@ -3,232 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFC Hardware Key Vault // CryptoVault & NfcKeyReader</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <title>NFC Hardware Vault</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <main>
+    <h1>NFC Hardware Vault</h1>
+    <p class="lead">
+      NFCタグ（指輪など）を物理鍵にして、ブラウザだけでデータを暗号化・復号するデモです。
+      <span id="hw-support-label" class="support">NFC判定中...</span>
+      <a href="demo.html">最小構成のデモへ</a>
+    </p>
 
-  <!-- Header -->
-  <header class="site-header">
-    <div class="site-header__inner">
-      <div class="brand">
-        <div class="brand__icon">
-          <i class="fa-solid fa-ring"></i>
-        </div>
-        <div>
-          <h1 class="brand__title">
-            NFC Hardware Vault <span class="tag">AES-GCM-256</span>
-          </h1>
-          <p class="brand__sub">Vanilla JS: CryptoVault &amp; NfcKeyReader</p>
-        </div>
-      </div>
-
-      <!-- Hardware Status Badge -->
-      <div id="hw-support-badge" class="hw-badge">
-        <span class="hw-badge__dot"></span>
-        <span id="hw-support-label" class="hw-badge__label">NFC判定中...</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- Notification Toast Container -->
-  <div id="toast-container" class="toasts" aria-live="polite"></div>
-
-  <main class="main">
-
-    <!-- Compatibility Guide (PC / iOS / Android) -->
+    <!-- Web NFC 非対応環境向けの案内 -->
     <div id="compat-notice" class="notice" hidden>
-      <i class="fa-solid fa-circle-exclamation"></i>
-      <div>
-        <p class="notice__title">Web NFC非対応ブラウザで開いています（PC / iPhone）</p>
-        <p class="notice__body">
-          実機の指輪読み取り・書き込みには <strong>Android版 Chrome（HTTPS環境）</strong> が必要です。本ページでは、PCやiOSでも即座に暗号化と解錠フローをテストできるよう<strong class="accent">「シミュレーター機能」</strong>が内蔵されています。
-        </p>
-      </div>
+      <p><strong>Web NFC非対応のブラウザで開いています。</strong></p>
+      <p>実機のタグの読み書きにはAndroid版Chrome（HTTPS環境）が必要です。PCやiPhoneでは「シミュレート」ボタンで解錠の流れを試せます。</p>
     </div>
 
-    <!-- 2 Column Flow: Setup & Decrypt -->
-    <div class="grid-2">
+    <!-- STEP 1: 鍵の生成と暗号化 -->
+    <section>
+      <h2>1. 鍵の生成と暗号化</h2>
 
-      <!-- STEP 1: 鍵の生成と暗号化 (Setup & Encrypt) -->
-      <section class="panel">
-        <div class="panel__head">
-          <div class="panel__title">
-            <span class="step">1</span>
-            <h2>鍵の生成とデータの暗号化</h2>
-          </div>
-          <span class="panel__api">CryptoVault.encrypt()</span>
-        </div>
+      <label for="input-plaintext">秘密の本文</label>
+      <textarea id="input-plaintext" rows="3"></textarea>
 
-        <!-- Plaintext Input -->
-        <div class="field">
-          <div class="field__head">
-            <label for="input-plaintext" class="field__label">秘密の本文（暗号化したいデータ）</label>
-            <span class="field__hint">平文はソースコードに残しません</span>
-          </div>
-          <textarea id="input-plaintext" rows="3" class="input" placeholder="例: 機密メモ: 社内Wi-Fiパスワードは [X#99vL_k1] です。"></textarea>
-        </div>
-
-        <!-- Secret Key Field -->
-        <div class="field">
-          <div class="field__head">
-            <label for="input-key" class="field__label">物理鍵用シークレットキー（指輪へ書き込む文字列）</label>
-            <button id="btn-generate-key" type="button" class="link-btn">
-              <i class="fa-solid fa-arrows-rotate"></i> 強力な鍵を自動生成
-            </button>
-          </div>
-          <div class="input-wrap">
-            <input type="text" id="input-key" class="input input--key" autocomplete="off" spellcheck="false" placeholder="32文字の暗号学的に安全なランダム鍵">
-            <button id="btn-copy-key" type="button" class="icon-btn input-wrap__btn" title="クリップボードにコピー" aria-label="鍵をクリップボードにコピー">
-              <i class="fa-regular fa-copy"></i>
-            </button>
-          </div>
-          <p class="field__hint mono">※ NTAG213の容量（144バイト）に対し、32文字（約32バイト）は余裕で収まります。</p>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="btn-row">
-          <button id="btn-run-encrypt" type="button" class="btn btn--primary">
-            <i class="fa-solid fa-lock"></i> 暗号化を実行
-          </button>
-          <button id="btn-write-nfc" type="button" class="btn btn--secondary">
-            <i class="fa-solid fa-pen-to-square"></i> 指輪に鍵を書き込む
-          </button>
-        </div>
-
-        <!-- Output Encrypted Payload -->
-        <div class="field">
-          <div class="field__head">
-            <span class="field__label field__label--muted">
-              <i class="fa-solid fa-shield-halved icon-emerald"></i> 暗号化ペイロード JSON
-            </span>
-            <span id="badge-payload-status" class="badge">未暗号化</span>
-          </div>
-          <div class="code-out">
-            <pre id="output-payload" class="scroll">// 暗号化を実行すると、ここに salt / iv / ciphertext（Base64）が出力されます。
-// HTML内に残るのはこのゴミデータのみとなり、鍵なしでは解読不可能です。</pre>
-            <button id="btn-copy-payload" type="button" class="chip-btn">JSONコピー</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- STEP 2: 指輪をかざして解錠 (Scan & Decrypt) -->
-      <section class="panel">
-        <div class="panel__head">
-          <div class="panel__title">
-            <span class="step step--green">2</span>
-            <h2>指輪をかざして解錠</h2>
-          </div>
-          <span class="panel__api">NfcKeyReader.startScan()</span>
-        </div>
-
-        <!-- NFC Scanner Trigger Hub -->
-        <div id="scanner" class="scanner" data-state="idle">
-          <!-- Animated Radar / Status Icon -->
-          <div class="scanner__radar">
-            <div class="scanner__pulse"></div>
-            <div class="scanner__icon">
-              <i class="fa-solid fa-nfc-directional" id="scanner-status-icon"></i>
-            </div>
-          </div>
-
-          <div>
-            <div id="scanner-status-text" class="scanner__status">スキャナー待機中 (IDLE)</div>
-            <div id="scanner-sub-text" class="scanner__sub" aria-live="polite">ボタンを押してスマートフォンに指輪をタッチしてください</div>
-          </div>
-
-          <div class="scanner__actions">
-            <button id="btn-start-scan" type="button" class="btn btn--scan">
-              <i class="fa-solid fa-wave-square"></i>
-              <span>NFCスキャン待機開始</span>
-            </button>
-            <button id="btn-stop-scan" type="button" class="btn btn--stop" title="スキャン停止" aria-label="スキャン停止" hidden>
-              <i class="fa-solid fa-stop"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- Simulation Tools (Fallback for Non-Android / Quick testing) -->
-        <div class="simulator">
-          <div class="simulator__head">
-            <span class="simulator__title">
-              <i class="fa-solid fa-gamepad"></i> デバイスシミュレーター (PC/iOSテスト用)
-            </span>
-            <span class="panel__api">simulateRead()</span>
-          </div>
-          <div class="simulator__buttons">
-            <button id="btn-sim-valid" type="button" class="sim-btn sim-btn--ok">
-              <i class="fa-solid fa-check"></i>
-              <span>正規の鍵で解錠</span>
-            </button>
-            <button id="btn-sim-invalid" type="button" class="sim-btn sim-btn--ng">
-              <i class="fa-solid fa-xmark"></i>
-              <span>偽物の鍵で解錠</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Decrypted Result Container -->
-        <div class="field">
-          <div class="field__head">
-            <span class="field__label field__label--muted">
-              <i class="fa-solid fa-envelope-open-text icon-sky"></i> 復号された機密コンテンツ
-            </span>
-            <button id="btn-clear-decrypted" type="button" class="link-btn link-btn--muted" hidden>再ロック</button>
-          </div>
-          <div id="decrypted-box" class="vault-box" data-state="locked">
-            <div id="decrypted-placeholder" class="vault-box__placeholder">
-              <i class="fa-solid fa-lock"></i>
-              暗号化されたままです。有効な指輪を検知するとここに平文が表示されます。
-            </div>
-            <div id="decrypted-content" class="vault-box__content" hidden></div>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- CODE ARCHITECTURE & LIBRARY EXPORTS (Accordion) -->
-    <section class="accordion">
-      <button id="btn-toggle-source" type="button" class="accordion__toggle" aria-expanded="false" aria-controls="source-drawer">
-        <span class="accordion__label">
-          <i class="fa-solid fa-code"></i>
-          <span>
-            <span class="accordion__title">ライブラリのソースコード構造と他のWebページへの組み込み方</span>
-            <span class="accordion__sub">CryptoVault / NfcKeyReader の単体利用コード</span>
-          </span>
-        </span>
-        <i class="fa-solid fa-chevron-down accordion__arrow"></i>
-      </button>
-
-      <div id="source-drawer" class="accordion__body" hidden>
-        <div>
-          <h4>使い方概要</h4>
-          <p>
-            外部ライブラリやnpmパッケージは一切不要です。ブラウザ標準の <strong>Web Crypto API</strong> と <strong>Web NFC (NDEFReader)</strong> をオブジェクト指向でラッピングしています。<code>js/crypto-vault.js</code> と <code>js/nfc-key-reader.js</code> の2ファイルを ES Modules として読み込むだけで任意のプロジェクトに導入可能です。最小構成の例は <a href="demo.html">demo.html</a> を参照してください。
-          </p>
-        </div>
-
-        <div>
-          <div class="snippet-head">
-            <span>CryptoVault + NfcKeyReader 利用例</span>
-            <button id="btn-copy-code" type="button" class="chip-btn">JSコードをコピー</button>
-          </div>
-          <pre id="code-snippet-display" class="snippet scroll"></pre>
-        </div>
+      <label for="input-key">鍵（タグに書き込む文字列）</label>
+      <div class="input-row">
+        <input type="text" id="input-key" autocomplete="off" spellcheck="false">
+        <button id="btn-generate-key" type="button">生成</button>
+        <button id="btn-copy-key" type="button">コピー</button>
       </div>
+      <p class="hint">32文字（約32バイト）はNTAG213の容量（144バイト）に十分収まります。</p>
+
+      <div class="row">
+        <button id="btn-run-encrypt" type="button" class="primary">暗号化</button>
+        <button id="btn-write-nfc" type="button">タグに鍵を書き込む</button>
+      </div>
+
+      <div class="row row--between">
+        <span class="label">暗号化ペイロード <span id="badge-payload-status" class="badge">未暗号化</span></span>
+        <button id="btn-copy-payload" type="button" class="small">JSONコピー</button>
+      </div>
+      <pre id="output-payload" class="payload">（未暗号化）</pre>
     </section>
 
+    <!-- STEP 2: タグで解錠 -->
+    <section>
+      <h2>2. タグをかざして解錠</h2>
+
+      <div id="scanner" class="status" data-state="idle" aria-live="polite">
+        <div id="scanner-status-text" class="status__label">待機中</div>
+        <div id="scanner-sub-text" class="status__sub">「スキャン開始」を押して、タグをスマートフォンにかざしてください。</div>
+      </div>
+
+      <div class="row">
+        <button id="btn-start-scan" type="button" class="primary">スキャン開始</button>
+        <button id="btn-stop-scan" type="button" hidden>停止</button>
+      </div>
+
+      <div class="row">
+        <span class="sim-label">シミュレート:</span>
+        <button id="btn-sim-valid" type="button">正しい鍵</button>
+        <button id="btn-sim-invalid" type="button">誤った鍵</button>
+      </div>
+
+      <div class="row row--between">
+        <span class="label">復号結果</span>
+        <button id="btn-clear-decrypted" type="button" class="small" hidden>再ロック</button>
+      </div>
+      <pre id="decrypted-content" data-state="locked">（ロック中）</pre>
+    </section>
+
+    <!-- ライブラリの使い方 -->
+    <section>
+      <details>
+        <summary>ライブラリの使い方</summary>
+        <p>
+          ブラウザ標準のWeb Crypto APIとWeb NFC（NDEFReader）をラップした2つのクラスです。<code>js/crypto-vault.js</code>と<code>js/nfc-key-reader.js</code>をES Modulesとして読み込むだけで使えます。
+        </p>
+        <div class="row row--between">
+          <span class="label">利用例</span>
+          <button id="btn-copy-code" type="button" class="small">コピー</button>
+        </div>
+        <pre id="code-snippet-display" class="snippet"></pre>
+      </details>
+    </section>
   </main>
 
-  <!-- Footer -->
-  <footer class="site-footer">
-    NFC Hardware Vault Prototype // Pure Vanilla JavaScript &amp; Web Standards
-  </footer>
+  <footer>NFC Hardware Vault Prototype / Vanilla JavaScript &amp; Web Standards</footer>
+
+  <div id="toast-container" class="toasts" aria-live="polite"></div>
 
   <script type="module" src="js/app.js"></script>
 </body>

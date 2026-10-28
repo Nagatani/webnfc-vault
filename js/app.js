@@ -8,7 +8,6 @@ import { NfcKeyReader } from './nfc-key-reader.js';
 const $ = (id) => document.getElementById(id);
 
 // Elements
-const hwSupportBadge = $('hw-support-badge');
 const hwSupportLabel = $('hw-support-label');
 const compatNotice = $('compat-notice');
 const inputPlaintext = $('input-plaintext');
@@ -26,40 +25,30 @@ const btnStartScan = $('btn-start-scan');
 const btnStopScan = $('btn-stop-scan');
 const scannerStatusText = $('scanner-status-text');
 const scannerSubText = $('scanner-sub-text');
-const scannerStatusIcon = $('scanner-status-icon');
 
 const btnSimValid = $('btn-sim-valid');
 const btnSimInvalid = $('btn-sim-invalid');
-const decryptedBox = $('decrypted-box');
-const decryptedPlaceholder = $('decrypted-placeholder');
 const decryptedContent = $('decrypted-content');
 const btnClearDecrypted = $('btn-clear-decrypted');
 
-const btnToggleSource = $('btn-toggle-source');
-const sourceDrawer = $('source-drawer');
 const codeSnippetDisplay = $('code-snippet-display');
 const btnCopyCode = $('btn-copy-code');
 const toastContainer = $('toast-container');
 
-// Scanner visual states (見た目は css/style.css の [data-state] で定義)
+// Scanner states (色は css/style.css の .status[data-state] で定義)
 const SCANNER_STATES = {
-  idle:      { icon: 'fa-nfc-directional', label: 'スキャナー待機中 (IDLE)' },
-  scanning:  { icon: 'fa-wave-square',     label: 'スキャン待機中 (SCANNING)' },
-  writing:   { icon: 'fa-pen-to-square',   label: '書き込み待機中 (WRITING)', look: 'scanning' },
-  reading:   { icon: 'fa-spinner fa-spin', label: '読み取り処理中...' },
-  success:   { icon: 'fa-unlock-keyhole',  label: 'AUTHENTICATED (解錠完了)' },
-  denied:    { icon: 'fa-ban',             label: 'ACCESS DENIED (解錠失敗)', look: 'error' },
-  nfcError:  { icon: 'fa-triangle-exclamation', label: 'NFC ERROR (通信エラー)', look: 'error' }
-};
-
-const TOAST_ICONS = {
-  info: 'fa-circle-info',
-  success: 'fa-circle-check',
-  error: 'fa-triangle-exclamation'
+  idle:     { label: '待機中' },
+  scanning: { label: 'スキャン中' },
+  writing:  { label: '書き込み待機中', look: 'scanning' },
+  reading:  { label: '読み取り中...' },
+  success:  { label: '解錠成功' },
+  denied:   { label: '解錠失敗', look: 'error' },
+  nfcError: { label: 'NFCエラー', look: 'error' }
 };
 
 const DEMO_PLAINTEXT = "【最高機密文書】\nプロジェクト・イージス内部通信コード: 994-Alpha-Delta\nこのテキストは物理NFC指輪がない限り数学的に閲覧できません。";
 const BOGUS_KEY = "INVALID_ROGUE_KEY_99999999999999";
+const LOCKED_TEXT = "（ロック中）";
 
 // App State
 let currentPayload = null; // Encrypted payload {salt, iv, ciphertext}
@@ -71,13 +60,8 @@ let nfcReader = null;
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = `toast toast--${type}`;
-
   // メッセージはタグ由来の値（UID等）を含み得るため、textContentで挿入する
-  const iconEl = document.createElement('i');
-  iconEl.className = `fa-solid ${TOAST_ICONS[type] || TOAST_ICONS.info}`;
-  const textEl = document.createElement('span');
-  textEl.textContent = message;
-  toast.append(iconEl, textEl);
+  toast.textContent = message;
   toastContainer.appendChild(toast);
 
   requestAnimationFrame(() => toast.classList.add('is-visible'));
@@ -88,17 +72,13 @@ function showToast(message, type = 'info') {
   }, 3500);
 }
 
-// Clipboard helper (Clipboard API -> execCommand fallback)
-async function copyText(text) {
+// Clipboard helper（Clipboard API は HTTPS / localhost で利用可能）
+async function copyText(text, successMessage) {
   try {
     await navigator.clipboard.writeText(text);
+    showToast(successMessage, "info");
   } catch (err) {
-    const temp = document.createElement('textarea');
-    temp.value = text;
-    document.body.appendChild(temp);
-    temp.select();
-    document.execCommand('copy');
-    document.body.removeChild(temp);
+    showToast("クリップボードにコピーできませんでした", "error");
   }
 }
 
@@ -106,19 +86,20 @@ async function copyText(text) {
 function initApp() {
   // Check Hardware Support
   if (NfcKeyReader.isSupported()) {
-    hwSupportBadge.dataset.state = 'supported';
-    hwSupportLabel.textContent = 'Web NFC 対応';
+    hwSupportLabel.dataset.state = 'supported';
+    hwSupportLabel.textContent = 'Web NFC対応ブラウザです。';
   } else {
-    hwSupportBadge.dataset.state = 'unsupported';
-    hwSupportLabel.textContent = 'Web NFC 非対応 (シミュレーター可)';
+    hwSupportLabel.dataset.state = 'unsupported';
+    hwSupportLabel.textContent = 'Web NFC非対応のため、シミュレートで試せます。';
     compatNotice.hidden = false;
+    btnStartScan.disabled = true;
+    btnWriteNfc.disabled = true;
   }
 
   // Setup NFC Reader Instance
   nfcReader = new NfcKeyReader({
     onKeyRead: async (keyString, meta) => {
-      showToast(`物理タグ検知 (UID: ${meta.serialNumber})`, 'info');
-      await attemptDecryption(keyString);
+      await attemptDecryption(keyString, meta);
     },
     onError: (err) => {
       showToast(err.message, 'error');
@@ -141,7 +122,7 @@ function initApp() {
 function generateNewKey({ silent = false } = {}) {
   inputKey.value = CryptoVault.generateRandomKey(32);
   markPayloadStale();
-  if (!silent) showToast("32文字の暗号化鍵を生成しました（暗号化を再実行してください）", "info");
+  if (!silent) showToast("32文字の鍵を生成しました（暗号化を再実行してください）", "info");
 }
 
 // 本文・鍵が暗号化後に変更されたら、ペイロードが古いことを表示する
@@ -153,7 +134,7 @@ function markPayloadStale() {
 
 function setPayloadBadge(state) {
   badgePayloadStatus.dataset.state = state;
-  badgePayloadStatus.textContent = state === 'stale' ? "入力変更あり (再暗号化が必要)" : "暗号化完了 (AES-256)";
+  badgePayloadStatus.textContent = state === 'stale' ? "要再暗号化" : "暗号化済み";
 }
 
 async function performEncryption({ silent = false } = {}) {
@@ -165,7 +146,7 @@ async function performEncryption({ silent = false } = {}) {
     return;
   }
   if (!key) {
-    showToast("鍵文字列を入力してください", "error");
+    showToast("鍵を入力してください", "error");
     return;
   }
 
@@ -175,7 +156,7 @@ async function performEncryption({ silent = false } = {}) {
     currentPlaintext = text;
     outputPayload.textContent = JSON.stringify(currentPayload, null, 2);
     setPayloadBadge('done');
-    if (!silent) showToast("データをAES-GCMで暗号化しました", "success");
+    if (!silent) showToast("AES-GCMで暗号化しました", "success");
 
     // Clear previous decrypted view to test freshly
     clearDecryptedView();
@@ -184,43 +165,35 @@ async function performEncryption({ silent = false } = {}) {
   }
 }
 
-async function attemptDecryption(keyString) {
+async function attemptDecryption(keyString, meta) {
   if (!currentPayload) {
-    showToast("暗号化ペイロードが存在しません。先に暗号化を実行してください。", "error");
+    showToast("暗号化ペイロードがありません。先に暗号化を実行してください。", "error");
     return;
   }
 
   try {
     const decryptedText = await CryptoVault.decrypt(currentPayload, keyString);
 
-    updateScannerVisuals('success', '認証成功: コンテンツが解読されました');
-    decryptedPlaceholder.hidden = true;
-    decryptedContent.hidden = false;
+    updateScannerVisuals('success', `鍵が一致し、内容を復号しました（UID: ${meta.serialNumber}）。`);
     decryptedContent.textContent = decryptedText;
-    decryptedBox.dataset.state = 'unlocked';
+    decryptedContent.dataset.state = 'unlocked';
     btnClearDecrypted.hidden = false;
-
-    showToast("復号に成功しました！", "success");
   } catch (err) {
     // 認証失敗時は、直前に解錠していた内容も再ロックする
     clearDecryptedView();
-    updateScannerVisuals('denied', err.message);
-    showToast(err.message, "error");
+    updateScannerVisuals('denied', `${err.message}（UID: ${meta.serialNumber}）`);
   }
 }
 
 function clearDecryptedView() {
-  decryptedPlaceholder.hidden = false;
-  decryptedContent.hidden = true;
-  decryptedContent.textContent = '';
-  decryptedBox.dataset.state = 'locked';
+  decryptedContent.textContent = LOCKED_TEXT;
+  decryptedContent.dataset.state = 'locked';
   btnClearDecrypted.hidden = true;
 }
 
 function updateScannerVisuals(state, message) {
   const config = SCANNER_STATES[state] || SCANNER_STATES.idle;
   scanner.dataset.state = config.look || state;
-  scannerStatusIcon.className = `fa-solid ${config.icon}`;
   scannerStatusText.textContent = config.label;
   scannerSubText.textContent = message;
 
@@ -267,9 +240,8 @@ await nfc.startScan();`;
 // ===================================================================
 btnGenerateKey.addEventListener('click', () => generateNewKey());
 
-btnCopyKey.addEventListener('click', async () => {
-  await copyText(inputKey.value);
-  showToast("鍵文字列をクリップボードにコピーしました", "info");
+btnCopyKey.addEventListener('click', () => {
+  copyText(inputKey.value, "鍵をコピーしました");
 });
 
 btnRunEncrypt.addEventListener('click', () => performEncryption());
@@ -279,7 +251,7 @@ inputPlaintext.addEventListener('input', markPayloadStale);
 btnWriteNfc.addEventListener('click', async () => {
   const key = inputKey.value.trim();
   if (!key) {
-    showToast("書き込む鍵文字列がありません", "error");
+    showToast("書き込む鍵がありません", "error");
     return;
   }
   if (currentPayload && key !== currentKey) {
@@ -288,7 +260,7 @@ btnWriteNfc.addEventListener('click', async () => {
   }
   try {
     await nfcReader.writeKey(key);
-    showToast("指輪に鍵の書き込みが成功しました！", "success");
+    showToast("タグに鍵を書き込みました", "success");
   } catch (err) {
     // 停止ボタンによる中断は通知不要
     if (err.name !== 'AbortError') {
@@ -297,10 +269,9 @@ btnWriteNfc.addEventListener('click', async () => {
   }
 });
 
-btnCopyPayload.addEventListener('click', async () => {
+btnCopyPayload.addEventListener('click', () => {
   if (!currentPayload) return;
-  await copyText(JSON.stringify(currentPayload, null, 2));
-  showToast("ペイロードJSONをコピーしました", "info");
+  copyText(JSON.stringify(currentPayload, null, 2), "ペイロードJSONをコピーしました");
 });
 
 btnStartScan.addEventListener('click', () => {
@@ -310,12 +281,11 @@ btnStartScan.addEventListener('click', () => {
 
 btnStopScan.addEventListener('click', () => {
   nfcReader.stopScan();
-  showToast("スキャンをキャンセルしました", "info");
 });
 
 // Simulation Triggers (Fallback for PC/iOS)
 btnSimValid.addEventListener('click', () => {
-  // 指輪には暗号化に使った鍵が書き込まれている想定
+  // タグには暗号化に使った鍵が書き込まれている想定
   if (!currentKey) {
     showToast("暗号化済みの鍵がありません。先に暗号化を実行してください", "error");
     return;
@@ -330,18 +300,10 @@ btnSimInvalid.addEventListener('click', () => {
 btnClearDecrypted.addEventListener('click', () => {
   clearDecryptedView();
   updateScannerVisuals('idle', '再ロックしました。');
-  showToast("コンテンツを再ロックしました", "info");
 });
 
-btnToggleSource.addEventListener('click', () => {
-  const expanded = btnToggleSource.getAttribute('aria-expanded') === 'true';
-  btnToggleSource.setAttribute('aria-expanded', String(!expanded));
-  sourceDrawer.hidden = expanded;
-});
-
-btnCopyCode.addEventListener('click', async () => {
-  await copyText(codeSnippetDisplay.textContent);
-  showToast("ライブラリ利用コードをコピーしました", "info");
+btnCopyCode.addEventListener('click', () => {
+  copyText(codeSnippetDisplay.textContent, "利用例のコードをコピーしました");
 });
 
 // Boot (type="module" は defer 扱いのため、この時点で DOM は構築済み)
