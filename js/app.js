@@ -20,7 +20,6 @@ import { NfcKeyReader } from './nfc-key-reader.js';
 
     const btnStartScan = document.getElementById('btn-start-scan');
     const btnStopScan = document.getElementById('btn-stop-scan');
-    const scanBtnLabel = document.getElementById('scan-btn-label');
     const scannerStatusText = document.getElementById('scanner-status-text');
     const scannerSubText = document.getElementById('scanner-sub-text');
     const scannerStatusIcon = document.getElementById('scanner-status-icon');
@@ -43,6 +42,8 @@ import { NfcKeyReader } from './nfc-key-reader.js';
 
     // App State
     let currentPayload = null; // Store encrypted payload JSON
+    let currentKey = null; // Key used to produce currentPayload
+    let currentPlaintext = null;
     let nfcReader = null;
 
     // Toast Notification helper
@@ -56,7 +57,13 @@ import { NfcKeyReader } from './nfc-key-reader.js';
                    'fa-circle-info text-sky-400';
 
       toast.className = `p-3 rounded-xl border ${borderClass} backdrop-blur shadow-2xl text-xs flex items-center gap-2.5 transition-all duration-300 pointer-events-auto transform translate-y-2 opacity-0`;
-      toast.innerHTML = `<i class="fa-solid ${icon} shrink-0 text-sm"></i><span class="flex-1 font-mono">${message}</span>`;
+      // メッセージはタグ由来の値（UID等）を含み得るため、textContentで挿入する
+      const iconEl = document.createElement('i');
+      iconEl.className = `fa-solid ${icon} shrink-0 text-sm`;
+      const textEl = document.createElement('span');
+      textEl.className = 'flex-1 font-mono';
+      textEl.textContent = message;
+      toast.append(iconEl, textEl);
       toastContainer.appendChild(toast);
 
       requestAnimationFrame(() => {
@@ -67,6 +74,20 @@ import { NfcKeyReader } from './nfc-key-reader.js';
         toast.classList.add('opacity-0', 'translate-y-2');
         setTimeout(() => toast.remove(), 300);
       }, 3500);
+    }
+
+    // Clipboard helper (Clipboard API -> execCommand fallback)
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (err) {
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+      }
     }
 
     // Initialize UI
@@ -83,7 +104,7 @@ import { NfcKeyReader } from './nfc-key-reader.js';
 
       // Generate default demo key and plaintext
       inputPlaintext.value = "【最高機密文書】\nプロジェクト・イージス内部通信コード: 994-Alpha-Delta\nこのテキストは物理NFC指輪がない限り数学的に閲覧できません。";
-      generateNewKey();
+      generateNewKey({ silent: true });
 
       // Setup NFC Reader Instance
       nfcReader = new NfcKeyReader({
@@ -109,17 +130,38 @@ import { NfcKeyReader } from './nfc-key-reader.js';
       });
 
       // Default encrypt initial payload
-      performEncryption();
+      performEncryption({ silent: true });
       populateCodeDisplay();
     }
 
-    function generateNewKey() {
+    function generateNewKey({ silent = false } = {}) {
       const newKey = CryptoVault.generateRandomKey(32);
       inputKey.value = newKey;
-      showToast("32文字の暗号化鍵を生成しました", "info");
+      markPayloadStale();
+      if (!silent) showToast("32文字の暗号化鍵を生成しました（暗号化を再実行してください）", "info");
     }
 
-    async function performEncryption() {
+    // 本文・鍵が暗号化後に変更されたら、ペイロードが古いことを表示する
+    function markPayloadStale() {
+      if (!currentPayload) return;
+      if (inputKey.value.trim() === currentKey && inputPlaintext.value.trim() === currentPlaintext) {
+        setPayloadBadge('done');
+      } else {
+        setPayloadBadge('stale');
+      }
+    }
+
+    function setPayloadBadge(state) {
+      if (state === 'stale') {
+        badgePayloadStatus.textContent = "入力変更あり (再暗号化が必要)";
+        badgePayloadStatus.className = "text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800";
+      } else {
+        badgePayloadStatus.textContent = "暗号化完了 (AES-256)";
+        badgePayloadStatus.className = "text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800";
+      }
+    }
+
+    async function performEncryption({ silent = false } = {}) {
       try {
         const text = inputPlaintext.value.trim();
         const key = inputKey.value.trim();
@@ -134,10 +176,11 @@ import { NfcKeyReader } from './nfc-key-reader.js';
         }
 
         currentPayload = await CryptoVault.encrypt(text, key);
+        currentKey = key;
+        currentPlaintext = text;
         outputPayload.textContent = JSON.stringify(currentPayload, null, 2);
-        badgePayloadStatus.textContent = "暗号化完了 (AES-256)";
-        badgePayloadStatus.className = "text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800";
-        showToast("データをAES-GCMで暗号化しました", "success");
+        setPayloadBadge('done');
+        if (!silent) showToast("データをAES-GCMで暗号化しました", "success");
 
         // Clear previous decrypted view to test freshly
         clearDecryptedView();
@@ -201,16 +244,14 @@ import { NfcKeyReader } from './nfc-key-reader.js';
         scannerStatusIcon.className = 'fa-solid fa-unlock-keyhole';
         scannerStatusText.textContent = 'AUTHENTICATED (解錠完了)';
         scannerStatusText.className = 'text-xs font-bold font-mono uppercase tracking-wider text-emerald-400';
-        btnStartScan.classList.remove('hidden');
-        btnStopScan.classList.add('hidden');
+        syncScanButtons();
       } else if (state === 'error') {
         radarPulse.className = 'absolute inset-0 rounded-full border border-rose-500';
         scannerIconBg.className = 'w-14 h-14 rounded-full bg-rose-950 border-2 border-rose-500 flex items-center justify-center text-rose-400 text-xl shadow-[0_0_20px_rgba(244,63,94,0.4)]';
         scannerStatusIcon.className = 'fa-solid fa-ban';
         scannerStatusText.textContent = 'ACCESS DENIED (解錠失敗)';
         scannerStatusText.className = 'text-xs font-bold font-mono uppercase tracking-wider text-rose-400';
-        btnStartScan.classList.remove('hidden');
-        btnStopScan.classList.add('hidden');
+        syncScanButtons();
       } else {
         // Idle
         radarPulse.className = 'absolute inset-0 rounded-full border border-slate-700';
@@ -221,6 +262,13 @@ import { NfcKeyReader } from './nfc-key-reader.js';
         btnStartScan.classList.remove('hidden');
         btnStopScan.classList.add('hidden');
       }
+    }
+
+    // 成功/失敗表示後もリーダーはスキャンを継続しているため、実際の状態でボタンを切り替える
+    function syncScanButtons() {
+      const scanning = nfcReader && nfcReader.isScanning;
+      btnStartScan.classList.toggle('hidden', scanning);
+      btnStopScan.classList.toggle('hidden', !scanning);
     }
 
     function populateCodeDisplay() {
@@ -247,24 +295,25 @@ await nfc.startScan();`;
     // ===================================================================
     // EVENT LISTENERS
     // ===================================================================
-    btnGenerateKey.addEventListener('click', generateNewKey);
+    btnGenerateKey.addEventListener('click', () => generateNewKey());
 
-    btnCopyKey.addEventListener('click', () => {
-      const temp = document.createElement('textarea');
-      temp.value = inputKey.value;
-      document.body.appendChild(temp);
-      temp.select();
-      document.execCommand('copy');
-      document.body.removeChild(temp);
+    btnCopyKey.addEventListener('click', async () => {
+      await copyText(inputKey.value);
       showToast("鍵文字列をクリップボードにコピーしました", "info");
     });
 
-    btnRunEncrypt.addEventListener('click', performEncryption);
+    btnRunEncrypt.addEventListener('click', () => performEncryption());
+    inputKey.addEventListener('input', markPayloadStale);
+    inputPlaintext.addEventListener('input', markPayloadStale);
 
     btnWriteNfc.addEventListener('click', async () => {
       const key = inputKey.value.trim();
       if (!key) {
         showToast("書き込む鍵文字列がありません", "error");
+        return;
+      }
+      if (currentPayload && key !== currentKey) {
+        showToast("鍵が暗号化時と異なります。先に暗号化を再実行してください", "error");
         return;
       }
       try {
@@ -275,14 +324,9 @@ await nfc.startScan();`;
       }
     });
 
-    btnCopyPayload.addEventListener('click', () => {
+    btnCopyPayload.addEventListener('click', async () => {
       if (!currentPayload) return;
-      const temp = document.createElement('textarea');
-      temp.value = JSON.stringify(currentPayload, null, 2);
-      document.body.appendChild(temp);
-      temp.select();
-      document.execCommand('copy');
-      document.body.removeChild(temp);
+      await copyText(JSON.stringify(currentPayload, null, 2));
       showToast("ペイロードJSONをコピーしました", "info");
     });
 
@@ -301,12 +345,12 @@ await nfc.startScan();`;
 
     // Simulation Triggers (Fallback for PC/iOS)
     btnSimValid.addEventListener('click', () => {
-      const validKey = inputKey.value.trim();
-      if (!validKey) {
-        showToast("鍵が空です。先に鍵を生成してください", "error");
+      // 指輪には暗号化に使った鍵が書き込まれている想定
+      if (!currentKey) {
+        showToast("暗号化済みの鍵がありません。先に暗号化を実行してください", "error");
         return;
       }
-      nfcReader.simulateRead(validKey);
+      nfcReader.simulateRead(currentKey);
     });
 
     btnSimInvalid.addEventListener('click', () => {
@@ -325,13 +369,8 @@ await nfc.startScan();`;
       accordionArrow.classList.toggle('rotate-180');
     });
 
-    btnCopyCode.addEventListener('click', () => {
-      const temp = document.createElement('textarea');
-      temp.value = codeSnippetDisplay.textContent;
-      document.body.appendChild(temp);
-      temp.select();
-      document.execCommand('copy');
-      document.body.removeChild(temp);
+    btnCopyCode.addEventListener('click', async () => {
+      await copyText(codeSnippetDisplay.textContent);
       showToast("ライブラリ利用コードをコピーしました", "info");
     });
 

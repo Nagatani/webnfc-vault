@@ -17,6 +17,7 @@
         this.onStatus = onStatus || (() => {});
         this.reader = null;
         this.abortController = null;
+        this.writeAbortController = null;
         this.isScanning = false;
       }
 
@@ -43,9 +44,7 @@
           this.abortController = new AbortController();
           this.reader = new NDEFReader();
 
-          this.onStatus("scanning", "NFCスキャン待機中... 指標をスマートフォンの背面にかざしてください。");
-          await this.reader.scan({ signal: this.abortController.signal });
-          this.isScanning = true;
+          this.onStatus("scanning", "NFCスキャン待機中... 指輪をスマートフォンの背面にかざしてください。");
 
           // タグ検知イベント
           this.reader.onreading = (event) => {
@@ -82,6 +81,10 @@
             this.onError(new Error("タグを検出しましたが通信に失敗しました。指輪をしっかり当てたまま静止させてください。"));
           };
 
+          // scan() 開始前にハンドラを登録しておき、直後のタグ検知を取りこぼさない
+          await this.reader.scan({ signal: this.abortController.signal });
+          this.isScanning = true;
+
         } catch (err) {
           this.isScanning = false;
           this.onStatus("idle", "スキャン停止");
@@ -103,6 +106,10 @@
         }
 
         try {
+          if (this.writeAbortController) {
+            this.writeAbortController.abort();
+          }
+          this.writeAbortController = new AbortController();
           const writer = new NDEFReader();
           this.onStatus("writing", "書き込み待機中... 指輪をスマホ背面にタッチしてください。");
           
@@ -113,23 +120,29 @@
                 data: keyString
               }
             ]
-          });
+          }, { signal: this.writeAbortController.signal });
+          this.writeAbortController = null;
 
           this.onStatus("idle", "タグへの書き込みが完了しました。");
           return true;
         } catch (err) {
+          this.writeAbortController = null;
           this.onStatus("idle", "書き込み中断");
           throw err;
         }
       }
 
       /**
-       * スキャンの停止
+       * スキャン（および待機中の書き込み）の停止
        */
       stopScan() {
         if (this.abortController) {
           this.abortController.abort();
           this.abortController = null;
+        }
+        if (this.writeAbortController) {
+          this.writeAbortController.abort();
+          this.writeAbortController = null;
         }
         this.reader = null;
         this.isScanning = false;

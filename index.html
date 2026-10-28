@@ -125,7 +125,7 @@
             <i class="fa-solid fa-lock"></i> 暗号化を実行
           </button>
           <button id="btn-write-nfc" class="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyber-border text-slate-200 font-semibold text-xs tracking-wide transition flex items-center justify-center gap-2 active:scale-[0.98]">
-            <i class="fa-solid fa-pen-to-square text-sky-400"></i> 指標に鍵を書き込む
+            <i class="fa-solid fa-pen-to-square text-sky-400"></i> 指輪に鍵を書き込む
           </button>
         </div>
 
@@ -247,13 +247,13 @@
         <div class="space-y-1">
           <h4 class="font-bold text-slate-200">使い方概要</h4>
           <p class="text-slate-400 leading-relaxed">
-            外部ライブラリやnpmパッケージは一切不要です。ブラウザ標準の <strong class="text-slate-300">Web Crypto API</strong> と <strong class="text-slate-300">Web NFC (NDEFReader)</strong> をオブジェクト指向でラッピングしています。以下の2つのクラスをコピーするだけで任意のプロジェクトに導入可能です。
+            外部ライブラリやnpmパッケージは一切不要です。ブラウザ標準の <strong class="text-slate-300">Web Crypto API</strong> と <strong class="text-slate-300">Web NFC (NDEFReader)</strong> をオブジェクト指向でラッピングしています。<code class="text-sky-300">js/crypto-vault.js</code> と <code class="text-sky-300">js/nfc-key-reader.js</code> の2ファイルを ES Modules として読み込むだけで任意のプロジェクトに導入可能です。最小構成の例は <a href="demo.html" class="text-sky-400 underline hover:text-sky-300">demo.html</a> を参照してください。
           </p>
         </div>
 
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <span class="font-mono text-sky-300 font-semibold">1. CryptoVault (暗号化・復号クラス)</span>
+            <span class="font-mono text-sky-300 font-semibold">CryptoVault + NfcKeyReader 利用例</span>
             <button id="btn-copy-code" class="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
               JSコードをコピー
             </button>

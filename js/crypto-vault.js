@@ -12,9 +12,19 @@
        */
       static generateRandomKey(length = 32) {
         const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_#";
-        const randomValues = new Uint8Array(length);
-        window.crypto.getRandomValues(randomValues);
-        return Array.from(randomValues, byte => charset[byte % charset.length]).join('');
+        // 剰余による偏りを避けるため、charset長の倍数を超えるバイトは棄却する
+        const limit = 256 - (256 % charset.length);
+        let result = "";
+        while (result.length < length) {
+          const randomValues = new Uint8Array(length);
+          window.crypto.getRandomValues(randomValues);
+          for (const byte of randomValues) {
+            if (byte < limit && result.length < length) {
+              result += charset[byte % charset.length];
+            }
+          }
+        }
+        return result;
       }
 
       /**
@@ -91,9 +101,14 @@
         const enc = new TextEncoder();
         const fromBase64 = (b64) => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 
-        const salt = fromBase64(payload.salt);
-        const iv = fromBase64(payload.iv);
-        const encryptedData = fromBase64(payload.ciphertext);
+        let salt, iv, encryptedData;
+        try {
+          salt = fromBase64(payload.salt);
+          iv = fromBase64(payload.iv);
+          encryptedData = fromBase64(payload.ciphertext);
+        } catch (err) {
+          throw new Error("無効な暗号化ペイロード形式です（Base64の解析に失敗しました）。");
+        }
 
         // PBKDF2用のベースキーをインポート
         const keyMaterial = await window.crypto.subtle.importKey(
