@@ -7,10 +7,13 @@ NFCタグ（指輪型タグなど）を「物理鍵」として使い、ブラ�
 
 | パス | 内容 |
 |---|---|
-| `index.html` / `js/app.js` | フル機能デモ（鍵生成・暗号化・タグ書き込み・スキャン・シミュレーター） |
+| `index.html` / `js/app.js` / `css/style.css` | フル機能デモ（鍵生成・暗号化・タグ書き込み・スキャン・シミュレーター） |
 | `demo.html` | 2つのライブラリだけを使った最小構成のデモ |
 | `js/crypto-vault.js` | `CryptoVault`: PBKDF2 (SHA-256, 100,000回) + AES-GCM-256 による暗号化・復号 |
 | `js/nfc-key-reader.js` | `NfcKeyReader`: Web NFC のスキャン・書き込みをコールバック形式でラップ |
+| `tests/` | Node.js 組み込みテストランナー用のテスト |
+
+CSS フレームワークは使っていません。外部から読み込むのはアイコン（Font Awesome）と Web フォント（Google Fonts）のみです。
 
 ## 動かし方
 
@@ -23,6 +26,14 @@ python3 -m http.server 8000
 
 - 実際のタグの読み書きには **Android 版 Chrome** と **HTTPS**（または localhost）が必要です。
 - PC や iOS では、シミュレートボタンで復号フローを試せます。
+
+## テスト
+
+Node.js 20 以上で、追加パッケージなしに実行できます（`NDEFReader` はモックで代用）。
+
+```sh
+node --test tests/*.test.mjs
+```
 
 ## 使い方
 
