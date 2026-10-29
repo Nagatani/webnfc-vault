@@ -3,6 +3,8 @@
 NFCタグ（指輪型タグなど）を「物理鍵」として使い、ブラウザだけでデータを暗号化・復号するデモです。
 ビルド不要の Vanilla JS（ES Modules）で、Web Crypto API と Web NFC (`NDEFReader`) を利用しています。
 
+https://nagatani.github.io/webnfc-vault/
+
 ## ファイル構成
 
 | パス | 内容 |
