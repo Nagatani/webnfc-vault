@@ -46,7 +46,7 @@ const SCANNER_STATES = {
   nfcError: { label: 'NFCエラー', look: 'error' }
 };
 
-const DEMO_PLAINTEXT = "【最高機密文書】\nプロジェクト・イージス内部通信コード: 994-Alpha-Delta\nこのテキストは物理NFC指輪がない限り数学的に閲覧できません。";
+const DEMO_PLAINTEXT = "【暗号化対象の文書】\nこのテキストは鍵情報が書き込まれたNFCを読み取らない限り数学的に閲覧できません。";
 const BOGUS_KEY = "INVALID_ROGUE_KEY_99999999999999";
 const LOCKED_TEXT = "（ロック中）";
 
