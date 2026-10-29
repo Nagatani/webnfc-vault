@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CryptoVault / NfcKeyReader 最小デモ</title>
+  <title>CryptoVault / NfcKeyReader 復号デモ</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -39,7 +39,9 @@
     main { max-width: 720px; margin: 0 auto; }
     h1 { font-size: 1.25rem; margin: 0 0 4px; }
     h2 { font-size: 1rem; margin: 0 0 8px; }
+    p { margin: 0 0 8px; }
     p.lead { margin: 0 0 16px; color: var(--muted); }
+    a { color: var(--accent); }
     section {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -48,6 +50,7 @@
       margin-bottom: 16px;
     }
     label { display: block; font-weight: 600; margin: 8px 0 4px; }
+    .hint { font-size: 12px; color: var(--muted); }
     textarea, input, pre {
       width: 100%;
       font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -57,8 +60,11 @@
       border-radius: 6px;
       padding: 8px;
     }
+    textarea { resize: vertical; }
     pre { margin: 8px 0 0; white-space: pre-wrap; word-break: break-all; min-height: 2.5em; }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+    .input-row { display: flex; gap: 8px; }
+    .input-row input { flex: 1; min-width: 0; }
     button {
       font: inherit;
       padding: 6px 12px;
@@ -71,41 +77,61 @@
     button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     button:disabled { opacity: .5; cursor: not-allowed; }
     #support { font-size: 12px; color: var(--muted); }
-    #result.ok { color: var(--ok); border-color: var(--ok); }
-    #result.ng { color: var(--ng); border-color: var(--ng); }
+    #payload-status { font-size: 12px; color: var(--muted); }
+    #payload-status.ok, #result.ok { color: var(--ok); }
+    #payload-status.ng, #result.ng { color: var(--ng); }
+    #result.ok { border-color: var(--ok); }
+    #result.ng { border-color: var(--ng); }
     #log { max-height: 160px; overflow-y: auto; color: var(--muted); font-size: 12px; }
+    details { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+    details summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+    details[open] summary { margin-bottom: 4px; }
   </style>
 </head>
 <body>
   <main>
-    <h1>CryptoVault / NfcKeyReader 最小デモ</h1>
+    <h1>CryptoVault / NfcKeyReader 復号デモ</h1>
     <p class="lead">
-      2つのライブラリだけを使った最小構成の例です。<span id="support"></span>
+      暗号化ペイロード（JSON）を貼り付け、NFCタグから読み取った鍵で復号します。<span id="support"></span>
       <a href="index.html">フル機能デモへ</a>
     </p>
 
     <section>
-      <h2>1. 暗号化</h2>
-      <label for="plain">本文</label>
-      <textarea id="plain" rows="3">NFCタグがなければ読めない秘密のメモ</textarea>
-      <label for="key">鍵（タグに書き込む文字列）</label>
-      <input id="key" type="text" autocomplete="off">
-      <div class="row">
-        <button id="gen">鍵を生成</button>
-        <button id="enc" class="primary">暗号化</button>
-        <button id="write">タグに鍵を書き込む</button>
-      </div>
-      <pre id="payload">（未暗号化）</pre>
+      <h2>1. 暗号化ペイロード</h2>
+      <label for="payload">JSON（salt / iv / ciphertext）</label>
+      <textarea id="payload" rows="6" spellcheck="false" placeholder='{ "salt": "...", "iv": "...", "ciphertext": "..." }'></textarea>
+      <div id="payload-status">index.htmlの「JSONコピー」で作成したJSONを貼り付けてください。</div>
+
+      <!-- ペイロード作成ドロワー -->
+      <details id="creator">
+        <summary>ここでペイロードを作成する</summary>
+        <label for="plain">本文</label>
+        <textarea id="plain" rows="3">NFCタグがなければ読めない秘密のメモ</textarea>
+        <label for="key">鍵（タグに書き込む文字列）</label>
+        <div class="input-row">
+          <input id="key" type="text" autocomplete="off" spellcheck="false">
+          <button id="gen" type="button">生成</button>
+        </div>
+        <div class="row">
+          <button id="enc" type="button" class="primary">暗号化してJSON欄に入力</button>
+          <button id="write" type="button">タグに鍵を書き込む</button>
+        </div>
+      </details>
     </section>
 
     <section>
-      <h2>2. タグで復号</h2>
+      <h2>2. タグを読み取って復号</h2>
       <div class="row">
-        <button id="scan" class="primary">スキャン開始</button>
-        <button id="stop">停止</button>
-        <button id="sim-ok">シミュレート: 正しい鍵</button>
-        <button id="sim-ng">シミュレート: 誤った鍵</button>
+        <button id="scan" type="button" class="primary">スキャン開始</button>
+        <button id="stop" type="button">停止</button>
       </div>
+
+      <label for="sim-key">シミュレート（タグの代わりに鍵を入力）</label>
+      <div class="input-row">
+        <input id="sim-key" type="text" autocomplete="off" spellcheck="false" placeholder="タグに書き込まれている鍵">
+        <button id="sim-read" type="button">この鍵で読み取り</button>
+      </div>
+
       <pre id="result">（ロック中）</pre>
     </section>
 
@@ -120,8 +146,6 @@
     import { NfcKeyReader } from './js/nfc-key-reader.js';
 
     const $ = (id) => document.getElementById(id);
-    let payload = null;
-    let encryptedWithKey = null;
 
     const log = (msg) => {
       $('log').textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + $('log').textContent;
@@ -132,17 +156,58 @@
       $('result').className = state || '';
     };
 
+    // JSON欄の内容をペイロードとして解釈する（不正なら例外）
+    const parsePayload = () => {
+      const text = $('payload').value.trim();
+      if (!text) throw new Error('JSONが入力されていません。');
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        throw new Error('JSONとして解析できません。');
+      }
+      for (const field of ['salt', 'iv', 'ciphertext']) {
+        if (typeof data?.[field] !== 'string' || !data[field]) {
+          throw new Error(`"${field}" がありません。`);
+        }
+      }
+      return data;
+    };
+
+    // 入力中にJSONの形式を確認して表示する
+    const checkPayload = () => {
+      const status = $('payload-status');
+      if (!$('payload').value.trim()) {
+        status.textContent = 'index.htmlの「JSONコピー」で作成したJSONを貼り付けてください。';
+        status.className = '';
+        return;
+      }
+      try {
+        parsePayload();
+        status.textContent = '有効なペイロードです。タグを読み取ると復号します。';
+        status.className = 'ok';
+      } catch (err) {
+        status.textContent = err.message;
+        status.className = 'ng';
+      }
+      showResult('（ロック中）');
+    };
+
     const supported = NfcKeyReader.isSupported();
     $('support').textContent = supported
-      ? 'Web NFC 対応ブラウザです。'
-      : 'Web NFC 非対応のため、シミュレートボタンで試せます。';
+      ? 'Web NFC対応ブラウザです。'
+      : 'Web NFC非対応のため、シミュレートで試せます。';
     for (const id of ['scan', 'stop', 'write']) $(id).disabled = !supported;
 
     const reader = new NfcKeyReader({
       onKeyRead: async (scannedKey, meta) => {
         log(`鍵を読み取り (UID: ${meta.serialNumber})`);
-        if (!payload) {
-          showResult('先に暗号化を実行してください。', 'ng');
+        let payload;
+        try {
+          payload = parsePayload();
+        } catch (err) {
+          showResult(`ペイロードエラー: ${err.message}`, 'ng');
+          log('ペイロードが不正なため復号できません');
           return;
         }
         try {
@@ -157,6 +222,8 @@
       onStatus: (status, message) => log(`${status}: ${message}`)
     });
 
+    $('payload').addEventListener('input', checkPayload);
+
     $('gen').addEventListener('click', () => {
       $('key').value = CryptoVault.generateRandomKey(32);
     });
@@ -164,11 +231,12 @@
     $('enc').addEventListener('click', async () => {
       try {
         const key = $('key').value.trim();
-        payload = await CryptoVault.encrypt($('plain').value.trim(), key);
-        encryptedWithKey = key;
-        $('payload').textContent = JSON.stringify(payload, null, 2);
-        showResult('（ロック中）');
-        log('暗号化しました');
+        const payload = await CryptoVault.encrypt($('plain').value.trim(), key);
+        $('payload').value = JSON.stringify(payload, null, 2);
+        // 作成直後にシミュレートで試せるよう、同じ鍵を入れておく
+        $('sim-key').value = key;
+        checkPayload();
+        log('暗号化してJSON欄に入力しました');
       } catch (err) {
         log(`暗号化エラー: ${err.message}`);
       }
@@ -179,21 +247,21 @@
         await reader.writeKey($('key').value.trim());
         log('タグへの書き込みが完了しました');
       } catch (err) {
-        log(`書き込みエラー: ${err.message}`);
+        if (err.name !== 'AbortError') log(`書き込みエラー: ${err.message}`);
       }
     });
 
     $('scan').addEventListener('click', () => reader.startScan().catch(() => {}));
     $('stop').addEventListener('click', () => reader.stopScan());
 
-    $('sim-ok').addEventListener('click', () => {
-      if (!encryptedWithKey) {
-        log('先に暗号化を実行してください');
+    $('sim-read').addEventListener('click', () => {
+      const key = $('sim-key').value.trim();
+      if (!key) {
+        log('シミュレートする鍵を入力してください');
         return;
       }
-      reader.simulateRead(encryptedWithKey);
+      reader.simulateRead(key);
     });
-    $('sim-ng').addEventListener('click', () => reader.simulateRead('WRONG_KEY_' + CryptoVault.generateRandomKey(8)));
 
     $('gen').click();
   </script>

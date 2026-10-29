@@ -10,7 +10,7 @@ https://nagatani.github.io/webnfc-vault/
 | パス | 内容 |
 |---|---|
 | `index.html` / `js/app.js` / `css/style.css` | フル機能デモ（鍵生成・暗号化・タグ書き込み・スキャン・シミュレーター） |
-| `demo.html` | 2つのライブラリだけを使った最小構成のデモ |
+| `demo.html` | 貼り付けたJSONペイロードを、NFCタグから読み取った鍵で復号するデモ（ペイロード作成用のドロワー付き） |
 | `js/crypto-vault.js` | `CryptoVault`: PBKDF2 (SHA-256, 100,000回) + AES-GCM-256 による暗号化・復号 |
 | `js/nfc-key-reader.js` | `NfcKeyReader`: Web NFC のスキャン・書き込みをコールバック形式でラップ |
 | `tests/` | Node.js 組み込みテストランナー用のテスト |
